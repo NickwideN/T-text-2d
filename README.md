@@ -30,5 +30,4 @@ And ridee@ upon the@@$$$$$$ breeze and go
 Whichever way I CHA@@@chanced to blow.</pre></td><td class="b1" valign="top"><pre>I often set and wish that I
 Could be a kite up in the sky,
 And ride upon the breeze and go
-Whichever way I chanced to blow.</pre></td></tr></table><h3>Submit a solution</h3><form method="post" enctype="multipart/form-data" action="http://diht.vdi.mipt.ru/cgi-bin/new-client"><input type="hidden" name="SID" value="9b20a0ff61dd23d2"/><input type="hidden" name="prob_id" value="20" />
-<table class="b0">
+Whichever way I chanced to blow.</pre></td></tr></table><h3>
