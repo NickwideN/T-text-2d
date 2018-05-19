@@ -15,7 +15,8 @@ enum class default_special_symbols
     End             =   '}'   ,
     Undo            =   '@'   ,
     Redo            =   '$'   ,
-    Line_Folding    =   '+'
+    Line_Folding    =   '+'   ,
+    Insert          =   '*'
 };
 
 //template<class special_symbols = default_special_symbols, class Container = std::list<char>, class iterator = std::list<char>::iterator>
@@ -30,6 +31,14 @@ private:
     typedef default_special_symbols special_symbols;
     Container text;
     cursor_t cursor;
+
+    class Action
+    {
+        typedef special_symbols action_t;
+        action_t action;
+        cursor_t cursor;
+    };
+    
 public:
     text_editor()
     {    
