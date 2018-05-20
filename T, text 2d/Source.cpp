@@ -19,16 +19,14 @@ enum class default_special_symbols
     Insert          =   '*'
 };
 
-
-
 //template<class special_symbols = default_special_symbols>
 class text_editor
 {
 private:
     typedef std::list<char> line;
-    typedef std::vector<line> text_t;
+    typedef std::list<line> text_t;
     typedef std::list<char>::iterator iterator_line;
-    typedef std::vector<line>::iterator iterator_vector;
+    typedef std::list<line>::iterator iterator_vector;
     typedef std::pair<iterator_vector, iterator_line> cursor_t;
     typedef default_special_symbols special_symbols;
 
@@ -150,7 +148,7 @@ private:
 
 
     bool execute_command_without_of_saving_action(const char & symbol);
-    text_editor & memory_release_after(const action_iterator & last_action_it);
+    text_editor & memory_release_after(action_iterator & last_action_it);
 public:
     text_editor();
 
@@ -184,7 +182,8 @@ public:
 
     std::string get_cursor() const
     {
-        return (std::string)"line = " + std::to_string(this->cursor.first - this->text.begin()) + "; cursor before " +
+        return (std::string)"line started with " + 
+            (this->cursor.first->empty() ? '0' : *this->cursor.first->begin()) + "; cursor before " +
             (this->cursor.second == (this->cursor.first)->end() ? '0' : *(this->cursor.second));
     }
 };
@@ -212,7 +211,7 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
             ++this->cursor.second;
             return true;
         }
-        else if (this->cursor.first != this->text.end() - 1)
+        else if (this->cursor.first != (--this->text.end())++)
         {
             ++this->cursor.first;
             this->cursor.second = this->cursor.first->begin();
@@ -220,7 +219,7 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
         }
         return false;
     case (char)special_symbols::Down:
-        if (this->cursor.first != this->text.end() - 1)
+        if (this->cursor.first != (--this->text.end())++)
         {
             auto prev_line = this->cursor.first;
             auto old_pozition = this->cursor.second;
@@ -255,10 +254,9 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
             char_for_romove.first->erase(char_for_romove.second);
             return true;
         }
-        else if (this->cursor.first != this->text.end() - 1)
+        else if (this->cursor.first != (--this->text.end())++)
         {
-            auto line_for_lifting = ++this->cursor.first;
-            --this->cursor.first;
+            auto line_for_lifting = (++this->cursor.first)--;
             for (auto ch : *line_for_lifting)
             {
                 this->cursor.first->push_back(ch);
@@ -278,15 +276,15 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
         }
         else if (this->cursor.first != this->text.begin())
         {
-            auto line_for_lifting = this->cursor.first;
-            --this->cursor.first;
-            auto old_pozition = this->cursor.first->end();
+            auto line_for_lifting = this->cursor.first--;
+            auto old_pozition = this->cursor.first->empty() ? this->cursor.first->begin() : --this->cursor.first->end();
+            bool another_line_was_empty = this->cursor.first->empty();
             for (auto ch : *line_for_lifting)
             {
                 this->cursor.first->push_back(ch);
             }
             this->text.erase(line_for_lifting);
-            this->cursor.second = old_pozition;
+            this->cursor.second = another_line_was_empty ? this->cursor.first->begin() : ++old_pozition;
             return true;
         }
         return false;
@@ -325,13 +323,13 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
     }
 }
 
-text_editor & text_editor::memory_release_after(const action_iterator & last_action_it)
+text_editor & text_editor::memory_release_after(action_iterator & last_action_it)
 {
-    while (actions.end() != last_action_it)
+    for (auto it = last_action_it; it != this->actions.end(); ++it)
     {
-        delete *(actions.end() - 1);
-        actions.pop_back();
+        delete *(it);
     }
+    this->actions.erase(last_action_it, this->actions.end());
     return *this;
 }
 
@@ -348,7 +346,7 @@ text_editor::~text_editor()
     {
         delete action;
     }
-    text.~vector();
+    text.~list();
 }
 
 bool text_editor::execute_command(const char & symbol)
@@ -378,11 +376,10 @@ bool text_editor::execute_command(const char & symbol)
     }
     case (char)special_symbols::Backspace:
     {
-        char sym = this->cursor.second == this->cursor.first->begin() ? (char)special_symbols::Line_Folding : *(--this->cursor.second);
-        ++this->cursor.second;
+        char sym = this->cursor.second == this->cursor.first->begin() ? (char)special_symbols::Line_Folding : *((--this->cursor.second)++);
         if (this->execute_command_without_of_saving_action(symbol))
         {
-            Backspace * backspace = new Backspace(symbol, this->cursor);
+            Backspace * backspace = new Backspace(sym, this->cursor);
             this->memory_release_after(last_action_it);
             actions.push_back(backspace);
             last_action_it = actions.end();
@@ -442,7 +439,7 @@ int main()
         getline(cin, commands);
         text.execute_command(commands);
         //text.execute_command('\n');
-        cout << text.get_text() << "END\nCursor: " << text.get_cursor() << '\n';
+        cout << "\t\t\tSTART\n" << text.get_text() << "\t\t\tEND\nCursor: " << text.get_cursor() << '\n';
     }
     getchar();
     getchar();
