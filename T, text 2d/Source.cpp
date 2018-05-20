@@ -19,34 +19,33 @@ enum class default_special_symbols
     Insert          =   '*'
 };
 
-//template<class special_symbols = default_special_symbols, class Container = std::list<char>, class iterator = std::list<char>::iterator>
+typedef std::list<char> line;
+typedef std::vector<line> text_t;
+typedef std::list<char>::iterator iterator_line;
+typedef std::vector<line>::iterator iterator_vector;
+typedef std::pair<iterator_vector, iterator_line> cursor_t;
+typedef default_special_symbols special_symbols;
+
+
+//template<class special_symbols = default_special_symbols>
 class text_editor
 {
 private:
-    typedef std::list<char> line;
-    typedef std::vector<line> Container;
-    typedef std::list<char>::iterator iterator_line;
-    typedef std::vector<line>::iterator iterator_vector;
-    typedef std::pair<iterator_vector, iterator_line> cursor_t;
-    typedef default_special_symbols special_symbols;
-    Container text;
-    cursor_t cursor;
+    class Action;
+    class Insert;
+    class Delete;
+    class Backspace;
+    class Line_Folding;
 
-    class Action
-    {
-        typedef special_symbols action_t;
-        action_t action;
-        cursor_t cursor;
-    };
+    text_t text;
+    cursor_t cursor;
+    std::list<Action*> actions;
+
     
 public:
-    text_editor()
-    {    
-        text.push_back(line());
-        cursor = make_pair(text.begin(), text.begin()->begin());
-    }
-
-    void execute_command(const char & symbol)
+    friend Insert;
+private:
+    void execute_command_without_of_saving_action(const char & symbol)
     {
         switch (symbol)
         {
@@ -103,7 +102,7 @@ public:
             {
                 auto char_for_romove = this->cursor;
                 this->execute_command((char)special_symbols::Right);
-                char_for_romove.first->erase(char_for_romove.second);                  
+                char_for_romove.first->erase(char_for_romove.second);
             }
             else if (this->cursor.first != this->text.end() - 1)
             {
@@ -153,6 +152,53 @@ public:
         }
     }
 
+
+public:
+    void execute_command(const char & symbol)
+    {
+        execute_command_without_of_saving_action(symbol);
+        switch (symbol)
+        {
+        case (char)special_symbols::Left:
+
+            break;
+        case (char)special_symbols::Right:
+            
+            break;
+        case (char)special_symbols::Down:
+            
+            break;
+        case (char)special_symbols::Up:
+            
+            break;
+        case (char)special_symbols::Delete:
+            Delete del;
+            break;
+        case (char)special_symbols::Backspace:
+            
+            break;
+        case (char)special_symbols::Home:
+            
+            break;
+        case (char)special_symbols::End:
+
+            break;
+        case (char)special_symbols::Line_Folding:
+            
+            break;
+        default:
+            Insert insert(symbol, this->cursor);
+            break;
+        }
+    }
+    text_editor()
+    {    
+        text.push_back(line());
+        cursor = make_pair(text.begin(), text.begin()->begin());
+    }
+
+    
+
     void execute_command(const std::string & text)
     {
         for (auto symbol_it = text.begin(); symbol_it != text.end(); ++symbol_it)
@@ -182,6 +228,113 @@ public:
     }
 };
 
+class text_editor::Action
+{
+protected:
+    cursor_t cursor;
+    Action(const cursor_t & cursor)
+        : cursor(cursor)
+    {
+    }
+    virtual void undo(text_editor & text) = 0;
+    virtual void redo(text_editor & text) = 0;
+};
+
+class text_editor::Insert : public text_editor::Action
+{
+    char symbol;
+public:
+    Insert(const char & symbol, const cursor_t & cursor)
+        : symbol(symbol), Action(cursor)
+    {
+    }
+
+    void undo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command_without_of_saving_action((char)special_symbols::Backspace);
+        this->cursor = text.cursor;
+    }
+    void redo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command(symbol);
+        this->cursor = text.cursor;
+    }
+};
+
+class text_editor::Delete : public text_editor::Action
+{
+    char symbol;
+public:
+    Delete(const char & symbol, const cursor_t & cursor)
+        : symbol(symbol), Action(cursor)
+    {
+    }
+
+    void undo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command(symbol);
+        text.execute_command((char)special_symbols::Left);
+        this->cursor = text.cursor;
+    }
+
+    void redo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command((char)special_symbols::Delete);
+        this->cursor = text.cursor;
+    }
+};
+
+class text_editor::Backspace : public text_editor::Action
+{
+    char symbol;
+public:
+    Backspace(const char & symbol, const cursor_t & cursor)
+        : symbol(symbol), Action(cursor)
+    {
+    }
+
+    void undo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command(symbol);
+        this->cursor = text.cursor;
+    }
+
+    void redo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command((char)special_symbols::Backspace);
+        this->cursor = text.cursor;
+    }
+};
+
+class text_editor::Line_Folding : public text_editor::Action
+{
+public:
+    Line_Folding(const cursor_t & cursor)
+        : Action(cursor)
+    {
+    }
+
+    void undo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command((char)special_symbols::Backspace);
+        this->cursor = text.cursor;
+    }
+
+    void redo(text_editor & text) override
+    {
+        text.cursor = this->cursor;
+        text.execute_command((char)special_symbols::Line_Folding);
+        this->cursor = text.cursor;
+    }
+};
+
 using namespace std;
 
 int main()
@@ -194,7 +347,7 @@ int main()
         text.execute_command(commands);
         //text.execute_command('\n');
         cout << text.get_text() << "END\nCursor: " << text.get_cursor() << '\n';
-    } 
+    }
     getchar();
     getchar();
     return 0;
