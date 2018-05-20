@@ -19,192 +19,153 @@ enum class default_special_symbols
     Insert          =   '*'
 };
 
-typedef std::list<char> line;
-typedef std::vector<line> text_t;
-typedef std::list<char>::iterator iterator_line;
-typedef std::vector<line>::iterator iterator_vector;
-typedef std::pair<iterator_vector, iterator_line> cursor_t;
-typedef default_special_symbols special_symbols;
 
 
 //template<class special_symbols = default_special_symbols>
 class text_editor
 {
 private:
-    class Action;
-    class Insert;
-    class Delete;
-    class Backspace;
-    class Line_Folding;
+    typedef std::list<char> line;
+    typedef std::vector<line> text_t;
+    typedef std::list<char>::iterator iterator_line;
+    typedef std::vector<line>::iterator iterator_vector;
+    typedef std::pair<iterator_vector, iterator_line> cursor_t;
+    typedef default_special_symbols special_symbols;
+
+    class Action
+    {
+    protected:
+        cursor_t cursor;
+    public:
+        Action(const cursor_t & cursor)
+            : cursor(cursor)
+        {
+        }
+        virtual void undo(text_editor & text) = 0;
+        virtual void redo(text_editor & text) = 0;
+    };
+
+    class Insert : public Action
+    {
+        char symbol;
+    public:
+        Insert(const char & symbol, const cursor_t & cursor)
+            : symbol(symbol), Action(cursor)
+        {
+        }
+
+        void undo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command_without_of_saving_action((char)special_symbols::Backspace);
+            this->cursor = text.cursor;
+        }
+        void redo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command_without_of_saving_action(symbol);
+            this->cursor = text.cursor;
+        }
+    };
+
+    class Delete : public Action
+    {
+        char symbol;
+    public:
+        Delete(const char symbol, const cursor_t & cursor)
+            : symbol(symbol), Action(cursor)
+        {
+        }
+
+        void undo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command(symbol);
+            text.execute_command_without_of_saving_action((char)special_symbols::Left);
+            this->cursor = text.cursor;
+        }
+
+        void redo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command_without_of_saving_action((char)special_symbols::Delete);
+            this->cursor = text.cursor;
+        }
+    };
+
+    class Backspace : public Action
+    {
+        char symbol;
+    public:
+        Backspace(const char symbol, const cursor_t & cursor)
+            : symbol(symbol), Action(cursor)
+        {
+        }
+
+        void undo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command_without_of_saving_action(symbol);
+            this->cursor = text.cursor;
+        }
+
+        void redo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command_without_of_saving_action((char)special_symbols::Backspace);
+            this->cursor = text.cursor;
+        }
+    };
+
+    class Line_Folding : public Action
+    {
+    public:
+        Line_Folding(const cursor_t & cursor)
+            : Action(cursor)
+        {
+        }
+
+        void undo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command_without_of_saving_action((char)special_symbols::Backspace);
+            this->cursor = text.cursor;
+        }
+
+        void redo(text_editor & text) override
+        {
+            text.cursor = this->cursor;
+            text.execute_command_without_of_saving_action((char)special_symbols::Line_Folding);
+            this->cursor = text.cursor;
+        }
+    };
+
+    typedef std::vector<Action*> action_container_t;
+    typedef std::vector<Action*>::iterator action_iterator;
 
     text_t text;
     cursor_t cursor;
-    std::list<Action*> actions;
+    action_container_t actions;
+    action_iterator last_action_it;
 
-    
+
+    bool execute_command_without_of_saving_action(const char & symbol);
+    text_editor & memory_release_after(const action_iterator & last_action_it);
 public:
-    friend Insert;
-private:
-    void execute_command_without_of_saving_action(const char & symbol)
+    text_editor();
+
+    ~text_editor();
+
+    bool execute_command(const char & symbol);
+
+    bool execute_command(const std::string & text)
     {
-        switch (symbol)
-        {
-        case (char)special_symbols::Left:
-            if (this->cursor.second != this->cursor.first->begin())
-            {
-                --this->cursor.second;
-            }
-            else if (this->cursor.first != this->text.begin())
-            {
-                --this->cursor.first;
-                this->cursor.second = this->cursor.first->end();
-            }
-            break;
-        case (char)special_symbols::Right:
-            if (this->cursor.second != this->cursor.first->end())
-            {
-                ++this->cursor.second;
-            }
-            else if (this->cursor.first != this->text.end() - 1)
-            {
-                ++this->cursor.first;
-                this->cursor.second = this->cursor.first->begin();
-            }
-            break;
-        case (char)special_symbols::Down:
-            if (this->cursor.first != this->text.end() - 1)
-            {
-                auto prev_line = this->cursor.first;
-                auto old_pozition = this->cursor.second;
-                auto curr_line = ++this->cursor.first;
-                this->cursor.second = cursor.first->begin();
-                for (; old_pozition != prev_line->begin() && this->cursor.second != curr_line->end(); --old_pozition)
-                {
-                    this->execute_command((char)special_symbols::Right);
-                }
-            }
-            break;
-        case (char)special_symbols::Up:
-            if (this->cursor.first != this->text.begin())
-            {
-                auto prev_line = this->cursor.first;
-                auto old_pozition = this->cursor.second;
-                auto curr_line = --this->cursor.first;
-                this->cursor.second = cursor.first->begin();
-                for (; old_pozition != prev_line->begin() && this->cursor.second != curr_line->end(); --old_pozition)
-                {
-                    this->execute_command((char)special_symbols::Right);
-                }
-            }
-            break;
-        case (char)special_symbols::Delete:
-            if (this->cursor.second != this->cursor.first->end())
-            {
-                auto char_for_romove = this->cursor;
-                this->execute_command((char)special_symbols::Right);
-                char_for_romove.first->erase(char_for_romove.second);
-            }
-            else if (this->cursor.first != this->text.end() - 1)
-            {
-                auto line_for_lifting = ++this->cursor.first;
-                --this->cursor.first;
-                for (auto ch : *line_for_lifting)
-                {
-                    this->cursor.first->push_back(ch);
-                }
-                this->text.erase(line_for_lifting);
-            }
-            break;
-        case (char)special_symbols::Backspace:
-            if (this->cursor.second != this->cursor.first->begin())
-            {
-                this->execute_command((char)special_symbols::Left);
-                auto char_for_romove = this->cursor;
-                this->execute_command((char)special_symbols::Right);
-                char_for_romove.first->erase(char_for_romove.second);
-            }
-            else if (this->cursor.first != this->text.begin())
-            {
-                auto line_for_lifting = this->cursor.first;
-                --this->cursor.first;
-                auto old_pozition = this->cursor.first->end();
-                for (auto ch : *line_for_lifting)
-                {
-                    this->cursor.first->push_back(ch);
-                }
-                this->text.erase(line_for_lifting);
-                this->cursor.second = old_pozition;
-            }
-            break;
-        case (char)special_symbols::Home:
-            this->cursor.second = this->cursor.first->begin();
-            break;
-        case (char)special_symbols::End:
-            this->cursor.second = this->cursor.first->end();
-            break;
-        case (char)special_symbols::Line_Folding:
-            this->cursor.first = this->text.insert(++this->cursor.first, line());
-            this->cursor.second = this->cursor.first->begin();
-            break;
-        default:
-            this->cursor.first->insert(this->cursor.second, symbol);
-            break;
-        }
-    }
-
-
-public:
-    void execute_command(const char & symbol)
-    {
-        execute_command_without_of_saving_action(symbol);
-        switch (symbol)
-        {
-        case (char)special_symbols::Left:
-
-            break;
-        case (char)special_symbols::Right:
-            
-            break;
-        case (char)special_symbols::Down:
-            
-            break;
-        case (char)special_symbols::Up:
-            
-            break;
-        case (char)special_symbols::Delete:
-            Delete del;
-            break;
-        case (char)special_symbols::Backspace:
-            
-            break;
-        case (char)special_symbols::Home:
-            
-            break;
-        case (char)special_symbols::End:
-
-            break;
-        case (char)special_symbols::Line_Folding:
-            
-            break;
-        default:
-            Insert insert(symbol, this->cursor);
-            break;
-        }
-    }
-    text_editor()
-    {    
-        text.push_back(line());
-        cursor = make_pair(text.begin(), text.begin()->begin());
-    }
-
-    
-
-    void execute_command(const std::string & text)
-    {
+        bool changes_was = false;
         for (auto symbol_it = text.begin(); symbol_it != text.end(); ++symbol_it)
         {
-            this->execute_command(*symbol_it);
+            changes_was |= this->execute_command(*symbol_it);
         }
+        return changes_was;
     }
 
     std::string get_text() const
@@ -228,112 +189,247 @@ public:
     }
 };
 
-class text_editor::Action
+bool text_editor::execute_command_without_of_saving_action(const char & symbol)
 {
-protected:
-    cursor_t cursor;
-    Action(const cursor_t & cursor)
-        : cursor(cursor)
+    switch (symbol)
     {
+    case (char)special_symbols::Left:
+        if (this->cursor.second != this->cursor.first->begin())
+        {
+            --this->cursor.second;
+            return true;
+        }
+        else if (this->cursor.first != this->text.begin())
+        {
+            --this->cursor.first;
+            this->cursor.second = this->cursor.first->end();
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Right:
+        if (this->cursor.second != this->cursor.first->end())
+        {
+            ++this->cursor.second;
+            return true;
+        }
+        else if (this->cursor.first != this->text.end() - 1)
+        {
+            ++this->cursor.first;
+            this->cursor.second = this->cursor.first->begin();
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Down:
+        if (this->cursor.first != this->text.end() - 1)
+        {
+            auto prev_line = this->cursor.first;
+            auto old_pozition = this->cursor.second;
+            auto curr_line = ++this->cursor.first;
+            this->cursor.second = cursor.first->begin();
+            for (; old_pozition != prev_line->begin() && this->cursor.second != curr_line->end(); --old_pozition)
+            {
+                this->execute_command((char)special_symbols::Right);
+            }
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Up:
+        if (this->cursor.first != this->text.begin())
+        {
+            auto prev_line = this->cursor.first;
+            auto old_pozition = this->cursor.second;
+            auto curr_line = --this->cursor.first;
+            this->cursor.second = cursor.first->begin();
+            for (; old_pozition != prev_line->begin() && this->cursor.second != curr_line->end(); --old_pozition)
+            {
+                this->execute_command((char)special_symbols::Right);
+            }
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Delete:
+        if (this->cursor.second != this->cursor.first->end())
+        {
+            auto char_for_romove = this->cursor;
+            this->execute_command((char)special_symbols::Right);
+            char_for_romove.first->erase(char_for_romove.second);
+            return true;
+        }
+        else if (this->cursor.first != this->text.end() - 1)
+        {
+            auto line_for_lifting = ++this->cursor.first;
+            --this->cursor.first;
+            for (auto ch : *line_for_lifting)
+            {
+                this->cursor.first->push_back(ch);
+            }
+            this->text.erase(line_for_lifting);
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Backspace:
+        if (this->cursor.second != this->cursor.first->begin())
+        {
+            this->execute_command((char)special_symbols::Left);
+            auto char_for_romove = this->cursor;
+            this->execute_command((char)special_symbols::Right);
+            char_for_romove.first->erase(char_for_romove.second);
+            return true;
+        }
+        else if (this->cursor.first != this->text.begin())
+        {
+            auto line_for_lifting = this->cursor.first;
+            --this->cursor.first;
+            auto old_pozition = this->cursor.first->end();
+            for (auto ch : *line_for_lifting)
+            {
+                this->cursor.first->push_back(ch);
+            }
+            this->text.erase(line_for_lifting);
+            this->cursor.second = old_pozition;
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Home:
+        if (this->cursor.second != this->cursor.first->begin())
+        {
+            this->cursor.second = this->cursor.first->begin();
+            return true;
+        }
+        return false;
+    case (char)special_symbols::End:
+        if (this->cursor.second != this->cursor.first->end())
+        {
+            this->cursor.second = this->cursor.first->end();
+        }
+        return false;
+    case (char)special_symbols::Line_Folding:
+    {
+        line new_line;
+        while (this->cursor.second != this->cursor.first->end())
+        {
+            new_line.push_back(*(this->cursor.second));
+            this->execute_command_without_of_saving_action((char)special_symbols::Delete);
+        }
+        this->cursor.first = this->text.insert(++this->cursor.first, line(new_line));
+        this->cursor.second = this->cursor.first->begin();
+        return true;
     }
-    virtual void undo(text_editor & text) = 0;
-    virtual void redo(text_editor & text) = 0;
-};
+    case (char)special_symbols::Undo:
+        return false;
+    case (char)special_symbols::Redo:
+        return false;
+    default:
+        this->cursor.first->insert(this->cursor.second, symbol);
+        return true;
+    }
+}
 
-class text_editor::Insert : public text_editor::Action
+text_editor & text_editor::memory_release_after(const action_iterator & last_action_it)
 {
-    char symbol;
-public:
-    Insert(const char & symbol, const cursor_t & cursor)
-        : symbol(symbol), Action(cursor)
+    while (actions.end() != last_action_it)
     {
+        delete *(actions.end() - 1);
+        actions.pop_back();
     }
+    return *this;
+}
 
-    void undo(text_editor & text) override
-    {
-        text.cursor = this->cursor;
-        text.execute_command_without_of_saving_action((char)special_symbols::Backspace);
-        this->cursor = text.cursor;
-    }
-    void redo(text_editor & text) override
-    {
-        text.cursor = this->cursor;
-        text.execute_command(symbol);
-        this->cursor = text.cursor;
-    }
-};
-
-class text_editor::Delete : public text_editor::Action
+text_editor::text_editor()
+    : last_action_it(this->actions.begin())
 {
-    char symbol;
-public:
-    Delete(const char & symbol, const cursor_t & cursor)
-        : symbol(symbol), Action(cursor)
-    {
-    }
+    text.push_back(line());
+    cursor = make_pair(text.begin(), text.begin()->begin());
+}
 
-    void undo(text_editor & text) override
-    {
-        text.cursor = this->cursor;
-        text.execute_command(symbol);
-        text.execute_command((char)special_symbols::Left);
-        this->cursor = text.cursor;
-    }
-
-    void redo(text_editor & text) override
-    {
-        text.cursor = this->cursor;
-        text.execute_command((char)special_symbols::Delete);
-        this->cursor = text.cursor;
-    }
-};
-
-class text_editor::Backspace : public text_editor::Action
+text_editor::~text_editor()
 {
-    char symbol;
-public:
-    Backspace(const char & symbol, const cursor_t & cursor)
-        : symbol(symbol), Action(cursor)
+    for (auto & action : actions)
     {
+        delete action;
     }
+    text.~vector();
+}
 
-    void undo(text_editor & text) override
-    {
-        text.cursor = this->cursor;
-        text.execute_command(symbol);
-        this->cursor = text.cursor;
-    }
-
-    void redo(text_editor & text) override
-    {
-        text.cursor = this->cursor;
-        text.execute_command((char)special_symbols::Backspace);
-        this->cursor = text.cursor;
-    }
-};
-
-class text_editor::Line_Folding : public text_editor::Action
+bool text_editor::execute_command(const char & symbol)
 {
-public:
-    Line_Folding(const cursor_t & cursor)
-        : Action(cursor)
+    switch (symbol)
     {
-    }
-
-    void undo(text_editor & text) override
+    case (char)special_symbols::Left:
+        return this->execute_command_without_of_saving_action(symbol);
+    case (char)special_symbols::Right:
+        return this->execute_command_without_of_saving_action(symbol);
+    case (char)special_symbols::Down:
+        return this->execute_command_without_of_saving_action(symbol);
+    case (char)special_symbols::Up:
+        return this->execute_command_without_of_saving_action(symbol);
+    case (char)special_symbols::Delete:
     {
-        text.cursor = this->cursor;
-        text.execute_command((char)special_symbols::Backspace);
-        this->cursor = text.cursor;
+        char sym = this->cursor.second == this->cursor.first->end() ? (char)special_symbols::Line_Folding : *this->cursor.second;
+        if (this->execute_command_without_of_saving_action(symbol))
+        {
+            Delete * del = new Delete(sym, this->cursor);
+            this->memory_release_after(last_action_it);
+            actions.push_back(del);
+            last_action_it = actions.end();
+            return true;
+        }
+        return false;
     }
-
-    void redo(text_editor & text) override
+    case (char)special_symbols::Backspace:
     {
-        text.cursor = this->cursor;
-        text.execute_command((char)special_symbols::Line_Folding);
-        this->cursor = text.cursor;
+        char sym = this->cursor.second == this->cursor.first->begin() ? (char)special_symbols::Line_Folding : *(--this->cursor.second);
+        ++this->cursor.second;
+        if (this->execute_command_without_of_saving_action(symbol))
+        {
+            Backspace * backspace = new Backspace(symbol, this->cursor);
+            this->memory_release_after(last_action_it);
+            actions.push_back(backspace);
+            last_action_it = actions.end();
+            return true;
+        }
+        return false;
     }
-};
+    case (char)special_symbols::Home:
+        return this->execute_command_without_of_saving_action(symbol);
+    case (char)special_symbols::End:
+        return this->execute_command_without_of_saving_action(symbol);
+    case (char)special_symbols::Line_Folding:
+        if (this->execute_command_without_of_saving_action(symbol))
+        {
+            Line_Folding * line_folding = new Line_Folding(this->cursor);
+            this->memory_release_after(last_action_it);
+            actions.push_back(line_folding);
+            last_action_it = actions.end();
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Undo:
+        if (this->last_action_it != actions.begin())
+        {
+            (*(--this->last_action_it))->undo(*this);
+            return true;
+        }
+        return false;
+    case (char)special_symbols::Redo:
+        if (this->last_action_it != actions.end())
+        {
+            (*(this->last_action_it++))->redo(*this);
+            return true;
+        }
+        return false;
+    default:
+        if (this->execute_command_without_of_saving_action(symbol))
+        {
+            Insert * insert = new Insert(symbol, this->cursor);
+            this->memory_release_after(last_action_it);
+            actions.push_back(insert);
+            last_action_it = actions.end();
+            return true;
+        }
+        return false;
+    }
+}
 
 using namespace std;
 
