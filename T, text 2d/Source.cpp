@@ -438,9 +438,10 @@ int main()
         string commands;
         getline(cin, commands);
         text.execute_command(commands);
-        //text.execute_command('\n');
-        cout << "\t\t\tSTART\n" << text.get_text() << "\t\t\tEND\nCursor: " << text.get_cursor() << '\n';
+        text.execute_command('+');
+        //cout << "\t\t\t\tSTART\n" << text.get_text() << "\t\t\t\tEND\nCursor: " << text.get_cursor() << '\n';
     }
+    cout << text.get_text();
     getchar();
     getchar();
     return 0;
