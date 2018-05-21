@@ -73,9 +73,15 @@ private:
     class Delete : public Action
     {
         char symbol;
+        vertical_iterator recovery_line;
     public:
         Delete(const char symbol, const cursor_t & cursor)
             : symbol(symbol), Action(cursor)
+        {
+        }
+
+        Delete(const char symbol, const cursor_t & cursor, const vertical_iterator & recovery_line)
+            : symbol(symbol), Action(cursor), recovery_line(recovery_line)
         {
         }
 
@@ -88,7 +94,7 @@ private:
             }
             else
             {
-                Line_Folding line_folding(this->cursor);
+                Line_Folding line_folding(this->cursor, this->recovery_line);
                 line_folding.redo(text);
             }
             text.execute_command_without_of_saving_action((char)special_symbols::Left);
@@ -106,9 +112,15 @@ private:
     class Backspace : public Action
     {
         char symbol;
+        vertical_iterator recovery_line;
     public:
         Backspace(const char symbol, const cursor_t & cursor)
             : symbol(symbol), Action(cursor)
+        {
+        }
+
+        Backspace(const char symbol, const cursor_t & cursor, const vertical_iterator & recovery_line)
+            : symbol(symbol), Action(cursor), recovery_line(recovery_line)
         {
         }
 
@@ -121,7 +133,7 @@ private:
             }
             else
             {
-                Line_Folding line_folding(this->cursor);
+                Line_Folding line_folding(this->cursor, this->recovery_line);
                 line_folding.redo(text);
             }
             this->cursor = text.cursor;
@@ -137,9 +149,10 @@ private:
 
     class Line_Folding : public Action
     {
+        vertical_iterator recovery_line;
     public:
-        Line_Folding(const cursor_t & cursor)
-            : Action(cursor)
+        Line_Folding(const cursor_t & cursor, const vertical_iterator & recovery_line)
+            : Action(cursor), recovery_line(recovery_line)
         {
         }
 
@@ -153,14 +166,13 @@ private:
         void redo(text_editor & text) override
         {
             text.cursor = this->cursor;
-            vertical_iterator recovery_line = (++text.cursor.first)--;
-            recovery_line->second = line_status::active;
+            this->recovery_line->second = line_status::active;
             while (text.cursor.second != text.cursor.first->first.end())
             {
-                recovery_line->first.push_back(*(text.cursor.second));
+                this->recovery_line->first.push_back(*(text.cursor.second));
                 text.execute_command_without_of_saving_action((char)special_symbols::Delete);
             }
-            text.cursor.first = recovery_line;
+            text.cursor.first = this->recovery_line;
             text.cursor.second = text.cursor.first->first.begin();
             this->cursor = text.cursor;
         }
@@ -208,14 +220,14 @@ public:
 
     vertical_iterator get_next_active(const vertical_iterator & it)
     {
-        vertical_iterator new_it;
+        vertical_iterator new_it = it;
         for (++new_it; new_it->second != line_status::active; ++new_it);
         return new_it;
     }
 
     vertical_iterator get_prev_active(const vertical_iterator & it)
     {
-        vertical_iterator new_it;
+        vertical_iterator new_it = it;
         for (--new_it; new_it->second != line_status::active; --new_it);
         return new_it;
     }
@@ -257,11 +269,11 @@ public:
                 }
                 text_string.push_back('\n');
             }
-            /*else
+            else
             {
                 text_string.push_back('~');
                 text_string.push_back('\n');
-            }*/
+            }
         }
         text_string.pop_back();
         return text_string;
@@ -368,7 +380,7 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
         }
         else if (this->cursor.first != --this->active_end())
         {
-            vertical_iterator line_for_lifting = (++this->cursor.first)--;
+            vertical_iterator line_for_lifting = this->get_next_active(this->cursor.first);
             iterator_line old_pozition = this->cursor.first->first.empty() ? this->cursor.first->first.begin() : --this->cursor.first->first.end();
             bool another_line_was_empty = this->cursor.first->first.empty();
             for (auto ch : line_for_lifting->first)
@@ -456,9 +468,14 @@ bool text_editor::execute_command(const char & symbol)
     case (char)special_symbols::Delete:
     {
         char sym = this->cursor.second == this->cursor.first->first.end() ? (char)special_symbols::Line_Folding : *this->cursor.second;
+        vertical_iterator recovery_line;
+        if (this->cursor.first != --this->active_end())
+        {
+            recovery_line = this->get_next_active(this->cursor.first);
+        }
         if (this->execute_command_without_of_saving_action(symbol))
         {
-            Delete * del = new Delete(sym, this->cursor);
+            Delete * del = new Delete(sym, this->cursor, recovery_line);
             this->memory_release_after(last_action_it);
             actions.push_back(del);
             last_action_it = actions.end();
@@ -469,9 +486,10 @@ bool text_editor::execute_command(const char & symbol)
     case (char)special_symbols::Backspace:
     {
         char sym = this->cursor.second == this->cursor.first->first.begin() ? (char)special_symbols::Line_Folding : *((--this->cursor.second)++);
+        vertical_iterator recovery_line = this->cursor.first;
         if (this->execute_command_without_of_saving_action(symbol))
         {
-            Backspace * backspace = new Backspace(sym, this->cursor);
+            Backspace * backspace = new Backspace(sym, this->cursor, recovery_line);
             this->memory_release_after(last_action_it);
             actions.push_back(backspace);
             last_action_it = actions.end();
@@ -484,15 +502,17 @@ bool text_editor::execute_command(const char & symbol)
     case (char)special_symbols::End:
         return this->execute_command_without_of_saving_action(symbol);
     case (char)special_symbols::Line_Folding:
+    {
         if (this->execute_command_without_of_saving_action(symbol))
         {
-            Line_Folding * line_folding = new Line_Folding(this->cursor);
+            Line_Folding * line_folding = new Line_Folding(this->cursor, this->cursor.first);
             this->memory_release_after(last_action_it);
             actions.push_back(line_folding);
             last_action_it = actions.end();
             return true;
         }
         return false;
+    }
     case (char)special_symbols::Undo:
         if (this->last_action_it != actions.begin())
         {
@@ -530,13 +550,52 @@ int main()
         string commands;
         getline(cin, commands);
         text.execute_command(commands);
-        text.execute_command('+');
-        //cout << "\t\t\t\tSTART\n" << text.get_text() << "\n\t\t\t\tEND\nCursor: " << text.get_cursor() << '\n';
+        //text.execute_command((char)default_special_symbols::Line_Folding);
+        cout << "\t\t\t\tSTART\n" << text.get_text() << "\n\t\t\t\tEND\nCursor: " << text.get_cursor() << '\n';
     }
-    cout << text.get_text();
+    //cout << text.get_text();
     getchar();
     getchar();
     return 0;
 }
 
+// Error tests:
 
+/*
+qwe<+<#@@
+
+qw|e  @
+*/
+
+
+// Corrected tests:
+
+/*
+qwe
+|ewq   @#
+~
+*/
+
+/*
+qwe|#
+
+ewq
+*/
+
+/*
+qwe|#
+~
+ewq
+*/
+
+/*
+qwe|ewq  @#
+~
+|~
+*/
+
+/*
+qwe
+
+ew|#
+*/
