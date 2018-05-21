@@ -82,7 +82,15 @@ private:
         void undo(text_editor & text) override
         {
             text.cursor = this->cursor;
-            text.execute_command(symbol);
+            if (symbol != (char)special_symbols::Line_Folding) 
+            {
+                text.execute_command_without_of_saving_action(symbol);
+            }
+            else
+            {
+                Line_Folding line_folding(this->cursor);
+                line_folding.redo(text);
+            }
             text.execute_command_without_of_saving_action((char)special_symbols::Left);
             this->cursor = text.cursor;
         }
@@ -107,7 +115,15 @@ private:
         void undo(text_editor & text) override
         {
             text.cursor = this->cursor;
-            text.execute_command_without_of_saving_action(symbol);
+            if (symbol != (char)special_symbols::Line_Folding)
+            {
+                text.execute_command_without_of_saving_action(symbol);
+            }
+            else
+            {
+                Line_Folding line_folding(this->cursor);
+                line_folding.redo(text);
+            }
             this->cursor = text.cursor;
         }
 
@@ -160,6 +176,7 @@ private:
 
     bool execute_command_without_of_saving_action(const char & symbol);
     text_editor & memory_release_after(action_iterator & last_action_it);
+
 public:
     text_editor();
 
@@ -240,11 +257,11 @@ public:
                 }
                 text_string.push_back('\n');
             }
-            else
+            /*else
             {
                 text_string.push_back('~');
                 text_string.push_back('\n');
-            }
+            }*/
         }
         text_string.pop_back();
         return text_string;
@@ -316,11 +333,11 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
     case (char)special_symbols::Down:
         if (this->cursor.first != --this->active_end())
         {
-            line prev_line = this->cursor.first->first;
+            vertical_iterator prev_line = this->cursor.first;
             iterator_line old_pozition = this->cursor.second;
-            line curr_line = (this->next_active(this->cursor.first))->first;
+            this->next_active(this->cursor.first);
             this->cursor.second = this->cursor.first->first.begin();
-            for (; old_pozition != prev_line.begin() && this->cursor.second != curr_line.end(); --old_pozition)
+            for (; old_pozition != prev_line->first.begin() && this->cursor.second != this->cursor.first->first.end(); --old_pozition)
             {
                 this->execute_command((char)special_symbols::Right);
             }
@@ -330,11 +347,11 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
     case (char)special_symbols::Up:
         if (this->cursor.first != this->text.begin())
         {
-            auto prev_line = this->cursor.first;
-            auto old_pozition = this->cursor.second;
-            auto curr_line = this->prev_active(this->cursor.first);
+            vertical_iterator prev_line = this->cursor.first;
+            iterator_line old_pozition = this->cursor.second;
+            this->prev_active(this->cursor.first);
             this->cursor.second = this->cursor.first->first.begin();
-            for (; old_pozition != prev_line->first.begin() && this->cursor.second != curr_line->first.end(); --old_pozition)
+            for (; old_pozition != prev_line->first.begin() && this->cursor.second != this->cursor.first->first.end(); --old_pozition)
             {
                 this->execute_command((char)special_symbols::Right);
             }
@@ -344,20 +361,23 @@ bool text_editor::execute_command_without_of_saving_action(const char & symbol)
     case (char)special_symbols::Delete:
         if (this->cursor.second != this->cursor.first->first.end())
         {
-            auto char_for_romove = this->cursor;
+            cursor_t char_for_romove = this->cursor;
             this->execute_command((char)special_symbols::Right);
             char_for_romove.first->first.erase(char_for_romove.second);
             return true;
         }
         else if (this->cursor.first != --this->active_end())
         {
-            auto line_for_lifting = (++this->cursor.first)--;
+            vertical_iterator line_for_lifting = (++this->cursor.first)--;
+            iterator_line old_pozition = this->cursor.first->first.empty() ? this->cursor.first->first.begin() : --this->cursor.first->first.end();
+            bool another_line_was_empty = this->cursor.first->first.empty();
             for (auto ch : line_for_lifting->first)
             {
                 this->cursor.first->first.push_back(ch);
             }
             line_for_lifting->first.clear();
             line_for_lifting->second = line_status::not_active;
+            this->cursor.second = another_line_was_empty ? this->cursor.first->first.begin() : ++old_pozition;
             return true;
         }
         return false;
@@ -510,10 +530,10 @@ int main()
         string commands;
         getline(cin, commands);
         text.execute_command(commands);
-        //text.execute_command('+');
-        cout << "\t\t\t\tSTART\n" << text.get_text() << "\n\t\t\t\tEND\nCursor: " << text.get_cursor() << '\n';
+        text.execute_command('+');
+        //cout << "\t\t\t\tSTART\n" << text.get_text() << "\n\t\t\t\tEND\nCursor: " << text.get_cursor() << '\n';
     }
-    //cout << text.get_text();
+    cout << text.get_text();
     getchar();
     getchar();
     return 0;
